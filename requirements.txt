@@ -11,6 +11,7 @@ oauth2client
 pillow
 pillow-heif
 pdf2image
+pytesseract
 python-telegram-bot
 httpx
 uuid
