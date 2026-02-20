@@ -9,6 +9,7 @@ scikit-learn
 gspread
 oauth2client
 pillow
+pillow-heif
 pdf2image
 python-telegram-bot
 httpx
