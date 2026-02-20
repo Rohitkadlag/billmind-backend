@@ -61,8 +61,12 @@ def extract_text(file_path: str) -> str:
             text = _extract_with_vision_api(image_path)
             logger.info("Successfully extracted text using Google Cloud Vision API")
         except Exception as vision_error:
-            logger.warning(f"Vision API failed: {vision_error}. Falling back to pytesseract")
-            text = _extract_with_tesseract(image_path)
+            logger.warning(f"Vision API failed: {vision_error}. Attempting fallback to pytesseract")
+            try:
+                text = _extract_with_tesseract(image_path)
+            except Exception as tesseract_error:
+                logger.error(f"Tesseract fallback also failed: {tesseract_error}")
+                raise Exception(f"OCR failed - Vision API: {vision_error}, Tesseract: {tesseract_error}")
         
         cleaned_text = _clean_text(text)
         return cleaned_text
