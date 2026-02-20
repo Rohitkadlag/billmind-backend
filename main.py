@@ -59,6 +59,31 @@ class StatusUpdateRequest(BaseModel):
     status: str
 
 
+class ManualBillRequest(BaseModel):
+    vendor: str
+    vendor_address: str = ""
+    bill_date: str = ""
+    due_date: str = ""
+    invoice_number: str = ""
+    total_amount: float = 0
+    subtotal: float = 0
+    tax: float = 0
+    discount: float = 0
+    currency: str = "USD"
+    category: str = "other"
+    payment_status: str = "unpaid"
+    payment_method: str = ""
+
+
+class UpdateBillRequest(BaseModel):
+    bill_id: str
+    updates: dict
+
+
+class DeleteBillRequest(BaseModel):
+    bill_id: str
+
+
 class ChatRequest(BaseModel):
     message: str
     history: List[dict] = []
@@ -263,6 +288,63 @@ async def update_bill_status(
         return {"success": success}
     except Exception as e:
         logger.error(f"Failed to update status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/bills/create")
+async def create_manual_bill(
+    request: ManualBillRequest,
+    x_api_key: Optional[str] = Header(None)
+):
+    """Create a bill manually without OCR processing."""
+    await verify_api_key(x_api_key)
+    
+    try:
+        bill_data = request.model_dump()
+        bill_id = storage.storage.create_manual_bill(bill_data)
+        return {"success": True, "bill_id": bill_id}
+    except Exception as e:
+        logger.error(f"Failed to create manual bill: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/bills/update")
+async def update_bill(
+    request: UpdateBillRequest,
+    x_api_key: Optional[str] = Header(None)
+):
+    """Update fields of an existing bill."""
+    await verify_api_key(x_api_key)
+    
+    try:
+        success = storage.storage.update_bill(request.bill_id, request.updates)
+        if not success:
+            raise HTTPException(status_code=404, detail="Bill not found")
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update bill: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/bills/{bill_id}")
+async def delete_bill(
+    bill_id: str,
+    x_api_key: Optional[str] = Header(None)
+):
+    """Delete a bill by ID."""
+    await verify_api_key(x_api_key)
+    
+    try:
+        success = storage.storage.delete_bill(bill_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Bill not found")
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete bill: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -271,6 +271,111 @@ class BillStorage:
             logger.error(f"Failed to update status: {e}")
             return False
     
+    def delete_bill(self, bill_id: str) -> bool:
+        """
+        Delete a bill from Google Sheets.
+        
+        Args:
+            bill_id: ID of the bill to delete
+            
+        Returns:
+            True if deleted successfully
+        """
+        try:
+            all_values = self.sheet.get_all_values()
+            
+            for idx, row in enumerate(all_values[1:], start=2):
+                if row[0] == bill_id:
+                    self.sheet.delete_rows(idx)
+                    logger.info(f"Deleted bill {bill_id}")
+                    return True
+            
+            logger.warning(f"Bill ID {bill_id} not found for deletion")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Failed to delete bill: {e}")
+            return False
+
+    def update_bill(self, bill_id: str, updates: Dict) -> bool:
+        """
+        Update fields of a bill in Google Sheets.
+        
+        Args:
+            bill_id: ID of the bill to update
+            updates: Dictionary of field names to new values
+            
+        Returns:
+            True if updated successfully
+        """
+        try:
+            headers = self.sheet.row_values(1)
+            all_values = self.sheet.get_all_values()
+            
+            for idx, row in enumerate(all_values[1:], start=2):
+                if row[0] == bill_id:
+                    for field, value in updates.items():
+                        if field in headers:
+                            col_idx = headers.index(field) + 1
+                            self.sheet.update_cell(idx, col_idx, value)
+                    logger.info(f"Updated bill {bill_id} with fields: {list(updates.keys())}")
+                    return True
+            
+            logger.warning(f"Bill ID {bill_id} not found for update")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Failed to update bill: {e}")
+            return False
+
+    def create_manual_bill(self, bill_data: Dict) -> str:
+        """
+        Create a bill manually (without OCR processing).
+        
+        Args:
+            bill_data: Dictionary with bill fields
+            
+        Returns:
+            Bill ID
+        """
+        try:
+            import uuid
+            bill_id = f"manual-{uuid.uuid4().hex[:8]}"
+            processed_at = datetime.utcnow().isoformat()
+            
+            row = [
+                bill_id,
+                bill_data.get('vendor', ''),
+                bill_data.get('vendor_address', ''),
+                bill_data.get('bill_date', ''),
+                bill_data.get('due_date', ''),
+                bill_data.get('invoice_number', ''),
+                bill_data.get('total_amount', 0),
+                bill_data.get('subtotal', 0),
+                bill_data.get('tax', 0),
+                bill_data.get('discount', 0),
+                bill_data.get('currency', 'USD'),
+                bill_data.get('category', 'other'),
+                '[]',
+                bill_data.get('payment_status', 'unpaid'),
+                bill_data.get('payment_method', ''),
+                False,
+                False,
+                '',
+                0,
+                'approve',
+                processed_at,
+                'manual'
+            ]
+            
+            self.sheet.append_row(row)
+            logger.info(f"Manual bill created: {bill_id}")
+            return bill_id
+            
+        except Exception as e:
+            logger.error(f"Failed to create manual bill: {e}")
+            raise Exception(f"Manual bill creation failed: {str(e)}")
+
     def get_summary(self) -> Dict:
         """
         Get summary statistics of all bills.
