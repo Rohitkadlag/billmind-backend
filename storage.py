@@ -18,9 +18,6 @@ class BillStorage:
     def __init__(self):
         """Initialize connection to Google Sheets."""
         try:
-            if not config.GOOGLE_CREDENTIALS_PATH:
-                raise Exception("Google credentials path not configured")
-            
             if not config.GOOGLE_SHEET_ID:
                 raise Exception("Google Sheet ID not configured")
             
@@ -29,10 +26,20 @@ class BillStorage:
                 'https://www.googleapis.com/auth/drive'
             ]
             
-            credentials = ServiceAccountCredentials.from_json_keyfile_name(
-                config.GOOGLE_CREDENTIALS_PATH,
-                scope
-            )
+            # Use credentials from environment variable or local file
+            import os
+            import json
+            
+            if os.getenv('GOOGLE_SHEETS_CREDENTIALS_JSON'):
+                # Production: credentials from environment variable
+                creds_dict = json.loads(os.getenv('GOOGLE_SHEETS_CREDENTIALS_JSON'))
+                credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+            else:
+                # Local development: use google-key.json file
+                credentials = ServiceAccountCredentials.from_json_keyfile_name(
+                    './google-key.json',
+                    scope
+                )
             
             client = gspread.authorize(credentials)
             self.sheet = client.open_by_key(config.GOOGLE_SHEET_ID).sheet1
