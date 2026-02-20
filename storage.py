@@ -30,9 +30,9 @@ class BillStorage:
             import os
             import json
             
-            if os.getenv('GOOGLE_SHEETS_CREDENTIALS_JSON'):
+            if os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON'):
                 # Production: credentials from environment variable
-                creds_dict = json.loads(os.getenv('GOOGLE_SHEETS_CREDENTIALS_JSON'))
+                creds_dict = json.loads(os.getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON'))
                 credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
             else:
                 # Local development: use google-key.json file
