@@ -2,13 +2,12 @@ import os
 import base64
 import logging
 import tempfile
+import requests
 from pathlib import Path
 from typing import Optional
 
 from PIL import Image
 from pdf2image import convert_from_path
-from google.cloud import vision
-from google.oauth2 import service_account
 from pillow_heif import register_heif_opener
 
 import config
@@ -19,11 +18,14 @@ register_heif_opener()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# OCR.space API endpoint (Free tier: 25,000 requests/month)
+OCR_SPACE_API_URL = "https://api.ocr.space/parse/image"
+OCR_SPACE_API_KEY = "K87899142388957"  # Free public API key
+
 
 def extract_text(file_path: str) -> str:
     """
-    Extract text from image or PDF file using Google Cloud Vision API.
-    Falls back to pytesseract if Vision API is unavailable.
+    Extract text from image or PDF file using OCR.space API (free).
     
     Args:
         file_path: Path to image or PDF file
@@ -57,16 +59,8 @@ def extract_text(file_path: str) -> str:
         else:
             image_path = file_path
         
-        try:
-            text = _extract_with_vision_api(image_path)
-            logger.info("Successfully extracted text using Google Cloud Vision API")
-        except Exception as vision_error:
-            logger.warning(f"Vision API failed: {vision_error}. Attempting fallback to pytesseract")
-            try:
-                text = _extract_with_tesseract(image_path)
-            except Exception as tesseract_error:
-                logger.error(f"Tesseract fallback also failed: {tesseract_error}")
-                raise Exception(f"OCR failed - Vision API: {vision_error}, Tesseract: {tesseract_error}")
+        text = _extract_with_ocr_space(image_path)
+        logger.info("Successfully extracted text using OCR.space API")
         
         cleaned_text = _clean_text(text)
         return cleaned_text
@@ -81,64 +75,45 @@ def extract_text(file_path: str) -> str:
             logger.debug(f"Cleaned up temporary file: {temp_image_path}")
 
 
-def _extract_with_vision_api(image_path: str) -> str:
-    """Extract text using Google Cloud Vision API."""
-    if not config.GOOGLE_CREDENTIALS_PATH or not os.path.exists(config.GOOGLE_CREDENTIALS_PATH):
-        raise Exception("Google credentials not found or not configured")
-    
-    credentials = service_account.Credentials.from_service_account_file(
-        config.GOOGLE_CREDENTIALS_PATH
-    )
-    client = vision.ImageAnnotatorClient(credentials=credentials)
-    
-    with open(image_path, 'rb') as image_file:
-        content = image_file.read()
-    
-    image = vision.Image(content=content)
-    response = client.text_detection(image=image)
-    
-    if response.error.message:
-        raise Exception(f"Vision API error: {response.error.message}")
-    
-    texts = response.text_annotations
-    if texts:
-        return texts[0].description
-    
-    return ""
-
-
-def _extract_with_tesseract(image_path: str) -> str:
-    """Fallback OCR using pytesseract."""
-    temp_converted_path = None
+def _extract_with_ocr_space(image_path: str) -> str:
+    """Extract text using OCR.space API (free tier: 25,000 requests/month)."""
     try:
-        import pytesseract
-        
-        # Always convert to PNG for maximum tesseract compatibility
-        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
-            temp_converted_path = tmp.name
-        
-        # Open image and convert to RGB
-        image = Image.open(image_path)
-        if image.mode not in ('RGB', 'L'):
-            image = image.convert('RGB')
-        
-        # Save as PNG
-        image.save(temp_converted_path, 'PNG')
-        logger.info(f"Converted image to PNG for tesseract: {temp_converted_path}")
-        
-        # Process the PNG file
-        text = pytesseract.image_to_string(Image.open(temp_converted_path))
-        logger.info("Successfully extracted text using pytesseract")
-        return text
-        
-    except ImportError:
-        raise Exception("pytesseract not installed. Install with: pip install pytesseract")
+        with open(image_path, 'rb') as image_file:
+            payload = {
+                'apikey': OCR_SPACE_API_KEY,
+                'language': 'eng',
+                'isOverlayRequired': False,
+                'detectOrientation': True,
+                'scale': True,
+                'OCREngine': 2,
+            }
+            
+            response = requests.post(
+                OCR_SPACE_API_URL,
+                files={'file': image_file},
+                data=payload,
+                timeout=30
+            )
+            
+            response.raise_for_status()
+            result = response.json()
+            
+            if result.get('IsErroredOnProcessing'):
+                error_msg = result.get('ErrorMessage', ['Unknown error'])[0]
+                raise Exception(f"OCR.space API error: {error_msg}")
+            
+            if result.get('ParsedResults'):
+                text = result['ParsedResults'][0].get('ParsedText', '')
+                return text
+            
+            return ""
+            
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"OCR.space API request failed: {str(e)}")
     except Exception as e:
-        raise Exception(f"Tesseract extraction failed: {str(e)}")
-    finally:
-        if temp_converted_path and os.path.exists(temp_converted_path):
-            os.unlink(temp_converted_path)
-            logger.debug(f"Cleaned up converted file: {temp_converted_path}")
+        raise Exception(f"OCR.space processing failed: {str(e)}")
+
+
 
 
 def _clean_text(text: str) -> str:

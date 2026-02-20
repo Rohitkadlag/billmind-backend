@@ -2,7 +2,6 @@ fastapi
 uvicorn
 python-multipart
 python-dotenv
-google-cloud-vision
 openai
 pandas
 scikit-learn
@@ -11,7 +10,7 @@ oauth2client
 pillow
 pillow-heif
 pdf2image
-pytesseract
 python-telegram-bot
 httpx
+requests
 uuid
